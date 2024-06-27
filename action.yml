@@ -1,23 +1,31 @@
-name: 'The name of your action here'
-description: 'Provide a description here'
-author: 'Your name or organization here'
+name: 'Build B2C Custom Policy Files'
+description: ''
+author: 'Nick Drazenovic'
 
 # Add your action's branding here. This will appear on the GitHub Marketplace.
 branding:
-  icon: 'heart'
-  color: 'red'
+  icon: 'book-open'
+  color: 'blue'
 
 # Define your inputs here.
 inputs:
-  milliseconds:
-    description: 'Your input description here'
+  environment: # id of input
+    description: 'What environment from appsettings.json to build for'
     required: true
-    default: '1000'
+  inputFolder:
+    description:
+      'Folder containing the XML policy files and the appsettings.json file'
+    required: true
+  outputFolder:
+    description:
+      'Folder to put the resulting compiled policy files into (will be created
+      if does not exist)'
+    required: true
 
 # Define your outputs here.
 outputs:
-  time:
-    description: 'Your output description here'
+  result:
+    description: 'Boolean result indicating success'
 
 runs:
   using: node20

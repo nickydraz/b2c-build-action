@@ -24951,52 +24951,86 @@ var __importStar = (this && this.__importStar) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.run = run;
 const core = __importStar(__nccwpck_require__(2186));
-const wait_1 = __nccwpck_require__(5259);
+const fs = __importStar(__nccwpck_require__(7147));
+const path = __importStar(__nccwpck_require__(1017));
 /**
  * The main function for the action.
  * @returns {Promise<void>} Resolves when the action is complete.
  */
 async function run() {
     try {
-        const ms = core.getInput('milliseconds');
-        // Debug logs are only output if the `ACTIONS_STEP_DEBUG` secret is true
-        core.debug(`Waiting ${ms} milliseconds ...`);
-        // Log the current timestamp, wait, then log the new timestamp
-        core.debug(new Date().toTimeString());
-        await (0, wait_1.wait)(parseInt(ms, 10));
-        core.debug(new Date().toTimeString());
-        // Set outputs for other workflow steps to use
-        core.setOutput('time', new Date().toTimeString());
+        // Fetch our input variables
+        const env = core.getInput('environment');
+        const inputFolder = core.getInput('inputFolder');
+        const outputFolder = core.getInput('outputFolder');
+        if (env === undefined ||
+            inputFolder === undefined ||
+            outputFolder === undefined) {
+            core.setFailed('A parameter is missing');
+            return;
+        }
+        if (!env || !inputFolder || !outputFolder) {
+            core.setFailed('A parameter is missing');
+            return;
+        }
+        if (!fs.existsSync(outputFolder)) {
+            fs.mkdirSync(outputFolder, { recursive: true });
+        }
+        const settings = JSON.parse(fs.readFileSync(path.join(inputFolder, 'appsettings.json'), 'utf-8'));
+        if (!settings) {
+            core.setFailed('Unable to read appsettings.json in input folder');
+            return;
+        }
+        if (!settings.Environments || settings.Environments.length === 0) {
+            core.setFailed('No Environments specified in appsettings.json');
+            return;
+        }
+        const envSettings = settings.Environments.find(s => s && s.Name === env);
+        if (!envSettings) {
+            core.setFailed(`Environment "${env}" was not found in Environments of appsettings.json`);
+            return;
+        }
+        if (!envSettings.Tenant) {
+            core.setFailed('Tenant not set in appsettings.json for environment');
+            return;
+        }
+        // Override/add settings from additional arguments
+        // envSettings.PolicySettings ??= {};
+        // for (const additionalArgument of additionalArguments) {
+        //   envSettings.PolicySettings[additionalArgument.key] = additionalArgument.value;
+        // }
+        const policyFiles = fs
+            .readdirSync(inputFolder)
+            .filter(f => f.endsWith('.xml'));
+        core.debug(`${policyFiles.length} XML files found in input folder`);
+        if (policyFiles.length === 0) {
+            core.setFailed('No XML files found in input folder');
+            return;
+        }
+        for (const policyFile of policyFiles) {
+            core.debug(`Replacing placeholders in ${policyFile}`);
+            let fileContent = fs.readFileSync(path.join(inputFolder, policyFile), 'utf-8');
+            // Tenant is a special setting
+            core.debug(`Replacing {Settings:Tenant} with ${envSettings.Tenant}`);
+            fileContent = fileContent.replace(/{Settings:Tenant}/g, envSettings.Tenant);
+            // Go through and replace all of the other settings
+            for (const policySettingKey of Object.keys(envSettings.PolicySettings ?? {})) {
+                core.debug(`Replacing {Settings:${policySettingKey}} with ${envSettings.PolicySettings[policySettingKey]}`);
+                fileContent = fileContent.replace(new RegExp(`{Settings:${policySettingKey}}`, 'g'), envSettings.PolicySettings[policySettingKey]);
+            }
+            // Write final version to output
+            const outputFile = path.join(outputFolder, policyFile);
+            core.debug(`Writing policy file ${outputFile}`);
+            fs.writeFileSync(outputFile, fileContent);
+        }
+        console.log(`Wrote ${policyFiles.length} policies to output folder`);
+        core.setOutput('result', 'success');
     }
     catch (error) {
         // Fail the workflow run if an error occurs
         if (error instanceof Error)
             core.setFailed(error.message);
     }
-}
-
-
-/***/ }),
-
-/***/ 5259:
-/***/ ((__unused_webpack_module, exports) => {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.wait = wait;
-/**
- * Wait for a number of milliseconds.
- * @param milliseconds The number of milliseconds to wait.
- * @returns {Promise<string>} Resolves with 'done!' after the wait is over.
- */
-async function wait(milliseconds) {
-    return new Promise(resolve => {
-        if (isNaN(milliseconds)) {
-            throw new Error('milliseconds not a number');
-        }
-        setTimeout(() => resolve('done!'), milliseconds);
-    });
 }
 
 
